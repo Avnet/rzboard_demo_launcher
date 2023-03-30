@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+    <head>
+    </head>
+    <body>
+        <h1>Example Demo</h1>
+        <button id="randomButton">Generate Random Number</button>
+        <label id="randomLabel" for="randomNumberGen">Random Number: </label>
+    </body>
+
+    <script>
+        document.getElementById("randomButton").onclick = (e) => {
+            fetch("/exampleDemo/random")
+                .then((res) => res.json())
+                .then((val) => {
+                    console.log(val);
+                    document.getElementById("randomLabel").innerText = "Random Number: " + val.value;
+                })
+        }
+    </script>
+</html>

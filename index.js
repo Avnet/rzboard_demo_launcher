@@ -5,16 +5,21 @@ const app = express();
 const expressWs = require('express-ws')(app);
 const port = 8080;
 
+global.__basedir = __dirname;
+
 // Main web interface
-app.use(express.static('public'))
-app.use(express.static('node_modules'))
+app.use(express.static(`${global.__basedir}/public`))
+app.use(express.static(`${global.__basedir}/node_modules`))
 
 // Hold demos
 const demos = [];
 
+global.__demosDir = (process.argv.length === 2) ? __dirname + "/demos" : process.argv[2];
+
+
 // Probably not best way to dynamically load modules
-fs.readdirSync(__dirname + "/demos").forEach((dir) => {
-    var Demo = require("./demos/" + dir);
+fs.readdirSync(global.__demosDir).forEach((dir) => {
+    var Demo = require(global.__demosDir + "/" + dir);
     let demo = new Demo(app);
     demo.ws = expressWs.getWss('/');
     demos.push(demo);

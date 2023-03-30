@@ -17,7 +17,7 @@ class DemoBase {
         this.basename = path.basename(dirname)
         
         // Config
-        this.config = JSON.parse(fs.readFileSync(`./demos/${this.basename}/index.json`))
+        this.config = JSON.parse(fs.readFileSync(`${global.__demosDir}/${this.basename}/index.json`))
         this.config.id = this.basename
 
         this.state = {
@@ -35,7 +35,7 @@ class DemoBase {
         this.app.use(bodyParser.json());
 
         // Setup static path for web interface
-        this.app.use(`/${this.basename}`, express.static(`./demos/${this.basename}/public`))
+        this.app.use(`/${this.basename}`, express.static(`${global.__demosDir}/${this.basename}/public`))
 
         // Setup state requests
         this.app.get(`/${this.basename}/state`, this.handleStateRequest.bind(this));
