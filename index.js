@@ -8,6 +8,7 @@ const port = 8080;
 // Main web interface
 app.use(express.static('public'))
 app.use(express.static('node_modules'))
+
 // Hold demos
 const demos = [];
 
