@@ -36,7 +36,6 @@ app.get("/getDemoList", (req, res) => {
 })
 
 app.ws('/', (ws, req) => {
-    console.log('Socket connected.');
 });
 
 // Start server

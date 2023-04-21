@@ -1,212 +1,435 @@
+const FitAddonC = FitAddon.FitAddon;
+let app = null;
+
+// Main Application
 class Application {
-    
+    // Class constructor
     constructor() {
-        this.getDemoList();
-        this.activeDemo = null;
+        // Create terminal
+        this.terminal = new Terminal();
+        this.fitAddon = new FitAddonC()
+        this.terminal.open(document.getElementById("terminal"));
+		this.terminal.onData((data) => { this.handleTerminalData(data); });
+
+        // Demos list
         this.demos = [];
 
-        this.stdData = "";
+        // Create websocket
+        this.ws = new WebSocket("ws://" + location.hostname + ":" + location.port + "/");
+        this.ws.onmessage = this.handleWsMessage.bind(this);
+	
+        this.initialUISetup();
 
-        this.connectWebsockets();
+		this.getDemoList()
     }
 
-    // Get list of demos and write to page
+    setActiveDemo(demo) {
+	if (this.activeDemo) {
+		this.activeDemo.becomeInactive()
+	}
+
+	this.activeDemo = demo;
+	demo.becomeActive();
+    }
+
     getDemoList() {
-        fetch("/getDemoList")
-        .then((res) => res.json())
-        .then((data) => {             
-            // Fetch list from server
-            data.forEach((demo) => {
-                // Create demo and push to list of demos
-                let demoInst = new Demo(demo);
-                demoInst.addEventListener('becameActive', this.onDemoBecameActive.bind(this) )
-                this.demos.push(demoInst);
-            });
-        });    
+		fetch("/getDemoList")
+		.then((res) => res.json())
+		.then((demos) => {
+			demos.forEach((demo) => {
+				this.demos.push(new Demo(demo));
+			});
+		});
     }
 
-    onDemoBecameActive(e) {
-        this.activeDemo = e.target;
+    // Handle initial UI Setup
+    initialUISetup() {
+        // Handle themeing
+        if (document.querySelector("html").dataset.bsTheme === "dark")
+        {
+            document.getElementById("brandingImage").src = "assets/Avnet_logo_no-tagline_rgb_white.svg";
+        } else {
+            document.getElementById("brandingImage").src = "assets/Avnet_logo_no-tagline_rgb.svg";
+        }
+
+        // Handle Window Sizing
+        window.addEventListener("resize", this.handleResize.bind(this));
+        this.terminal.loadAddon(this.fitAddon)
+        this.fitAddon.fit()
     }
 
-    connectWebsockets() {
-        this.ws = new WebSocket("ws://" + window.location.host + "/")
-        this.ws.onmessage = this.handleWebsocketMessage.bind(this);
+    // Handle media query updates
+    handleMediaQuery(e) {
+        // Auto hide side bar for mobile
+        if (e.matches) {
+            document.getElementById("leftSideBar").classList.remove("show");
+        } else {
+            document.getElementById("leftSideBar").classList.add("show");
+        }
     }
 
-    handleWebsocketMessage(data) {
-        this.demos.forEach((demo) => {
-            demo.handleWebsocketMessage(data)
-        })
+    // Handle resize event
+    handleResize(e) {
+        if (this.activeDemo) {
+		this.activeDemo.handleResize();
+	}
+    }
+
+    handleWsConnect() {
+        // Send terminal size
+        this.ws.send(JSON.stringify({
+            command: "resize", 
+            rows: this.terminal.rows,
+            cols: this.terminal.cols
+        }));
+    }
+
+    handleWsMessage(msg) {
+        const data = JSON.parse(msg.data);
+        this.terminal.write(data.buffer);
+    }
+
+    handleTerminalData(data) {
+	if (this.activeDemo) {
+		this.activeDemo.handleTerminalData(data);
+	}
     }
 
 };
 
-class Demo extends EventTarget {
-    constructor(demo) {
-        super()
-
-        // Set properties
-        this.basename = demo.id;
-        this.name = demo.demoName;
-        this.description = demo.demoDescription;
-
-        this.state = {}
-        this.stdData = "";
-
-        this.createUIElement()
-        this.getState();
-        this.getStdData();
+// Demo Object class
+class Demo {
+    // Config prototype
+    config = {
+        id: "",
+        name: "",
+        description: "",
+        process: {
+            command: "",
+            args: [],
+            environment: []
+        }
     }
 
-    getState() {
-        fetch(`/${this.basename}/state`)
-        .then((res) => res.json())
-        .then((data) => {
-            this.state = data;
-            this.updateUI();
+    // Class constructor
+    constructor(config) {
+        // Demo config and state
+        this.config = config;
+        this.state = {
+		running: false
+	};
+
+        // PTY Buffer
+        this.ptyBuffer = [];
+        this.ptyBufferMaxLength = 1000;
+
+		// UI Elements
+		this.listItem = null;
+		this.listRunningIndicator = null;
+
+		this.addToList();
+
+		this.getState();
+
+		this.ws = new WebSocket("ws://" + location.hostname + ":" + location.port + "/" + this.config.id);
+		this.ws.onmessage = this.handleWebsocketMessage.bind(this);
+    }
+
+	getState() {
+		fetch("/" + this.config.id + "/state")
+		.then((res) => res.json())
+		.then((payload) => {
+			this.state = payload;
+			this.updateUI();
+		});
+	}
+
+    addToList() {
+
+	// Create list button
+	this.listItem = document.createElement("a")
+	this.listItem.href = "#"
+	this.listItem.classList.add("list-group-item", "d-flex", "justify-content-between", "align-items-start");
+	this.listItem.addEventListener("click", () => { app.setActiveDemo(this); });
+	
+	// Add Title
+	let container = document.createElement("div");
+	container.classList.add("ms-2",  "me-auto");
+	
+	let titleEl = document.createElement("div");
+	titleEl.classList.add("fw-bold");
+	titleEl.innerText = this.config.name;
+	container.appendChild(titleEl);
+
+	// Add running indicator
+	this.listRunningIndicator = document.createElement("span");
+	this.listRunningIndicator.classList.add("badge", "rounded-pill");
+	this.listRunningIndicator.innerText = "Not Running";
+	container.appendChild(this.listRunningIndicator)
+
+	// Add item to list
+	this.listItem.appendChild(container);
+	document.getElementById("leftMenuList").appendChild(this.listItem);
+
+    }
+
+    becomeActive() {
+		// Update title and description
+		document.getElementById("demoTitle").innerText = this.config.name;
+		document.getElementById("demoDescription").innerText = this.config.description;
+
+        // Bind toggle demo button
+        document.getElementById("demoToggleButton").onclick = this.toggleDemo.bind(this)
+
+        // Bind settings buttons
+        document.getElementById("demoAddArgumentButton").onclick = () => { this.addArgumentField() };
+        document.getElementById("demoAddEnvVarField").onclick = () =>  { this.addEnvVarField() };
+
+        // Setup Settings Modal
+        demoSettingsButton.onclick = this.setupSettingsModal.bind(this);
+        document.getElementById("demoSettingsSaveButton").onclick = this.saveSettings.bind(this);
+
+		// Setup Demo Page Button
+		document.getElementById("demoPageButton").onclick = () => { window.open("/" + this.config.id, '_blank'); }
+
+        // Populate terminal
+        app.terminal.reset();
+
+        this.ptyBuffer.forEach((data) => {
+            app.terminal.write(data);
+        });
+	
+		this.listItem.classList.add("active");
+        this.active = true;
+
+		this.updateUI();
+    }
+    
+    becomeInactive() {
+	this.listItem.classList.remove("active");
+
+	this.active = false;
+    }
+
+    // Function to add argument field in settings
+    addArgumentField(arg = "") {
+        // Field group
+        let group = document.createElement("div");
+        group.classList.add("input-group")
+        group.classList.add("demo-settings-input");
+        
+        // Text field
+        let field = document.createElement("input");
+        field.setAttribute("type", "text");
+        field.value = arg;
+        field.placeholder = "Argument";
+        field.classList.add(["form-control"]);
+        field.name = "arg";
+
+        // Remove button
+        let button = document.createElement("button");
+        button.classList.add("btn");
+        button.classList.add("btn-outline-secondary");
+        button.classList.add("d-inline-block");
+        button.innerText = "Remove";
+        button.addEventListener("click", (e) => {
+            group.remove()
         })
+
+        // Add nodes
+        group.appendChild(field);
+        group.appendChild(button);
+        document.getElementById("demoArgumentsList").appendChild(group);
+    }
+    
+    // Function to add argument field in settings
+    addEnvVarField(name = "", value = "") {
+        // Field group
+        let group = document.createElement("div");
+        group.classList.add("input-group");
+        group.classList.add("demo-settings-input");
+        
+        // Text field
+        let nameField = document.createElement("input");
+        nameField.setAttribute("type", "text");
+        nameField.placeholder = "Name";
+        nameField.value = name;
+        nameField.classList.add(["form-control"]);
+        nameField.name = "name";
+
+        // Text field
+        let valueField = document.createElement("input");
+        valueField.setAttribute("type", "text");
+        valueField.placeholder = "Value";
+        valueField.value = value;
+        valueField.classList.add(["form-control"]);
+        valueField.name = "value";
+
+        // Remove button
+        let button = document.createElement("button");
+        button.classList.add("btn");
+        button.classList.add("btn-outline-secondary")
+        button.classList.add("d-inline-block");
+        button.innerText = "Remove";
+        button.addEventListener("click", (e) => {
+            group.remove()
+        });
+
+        // Add nodes
+        group.appendChild(nameField);
+        group.appendChild(valueField)
+        group.appendChild(button);
+        document.getElementById("demoEnvVariablesList").appendChild(group);
     }
 
-    getStdData() {
-        fetch(`/${this.basename}/getStdData`)
-        .then((res) => res.json())
-        .then((data) => {
-            this.stdData = data.buffer;
-            this.updateUI();
-        })
-    }
-
-    createUIElement() {
-        // Demo list html element
-        let demoEl = document.getElementById("demoList");
-
-        // Create link and append to list element
-        this.item = document.createElement("a");
-        this.item.setAttribute("class", "list-group-item list-group-item-action list-group-item-light p-3");
-        this.item.href = "#";
-        this.item.innerText = this.name;
-
-        this.activeBadge = document.createElement("span");
-        this.activeBadge.setAttribute("class", "badge badge-pill");
-        this.activeBadge.setAttribute("style", "position:absolute; right:10px;")
-        this.activeBadge.innerText = "Not Running";
-        this.item.appendChild(this.activeBadge);
-
-        demoEl.appendChild(this.item);
-
-        this.item.addEventListener("click", (e) => { this.becomeActive(); });
-    }
-
+    // Function to handle demo button press
     toggleDemo() {
-        if (!this.state.running)
+		if (!this.state.running) {
+			fetch(`/${this.config.id}/start`, {method: 'POST'})
+		} else {
+			fetch(`/${this.config.id}/stop`, {method: 'POST'})
+		}
+    }
+
+    // Setup Settings Modal view
+    setupSettingsModal() {
+        // Get list nodes
+        let demoArgsListNode = document.getElementById("demoArgumentsList");
+        let demoEnvVarListNode = document.getElementById("demoEnvVariablesList");
+
+        // Clear lists
+        demoArgsListNode.innerHTML = "";
+        demoEnvVarListNode.innerHTML = "";
+
+        // Populate args list
+        this.config.process.args.forEach((arg) => {
+            this.addArgumentField(arg.toString());
+        });
+
+        // Populate env var list
+        this.config.process.environment.forEach((env) => {
+            this.addEnvVarField(env.name.toString(), env.value.toString());
+        });
+    }
+
+    // Save settings
+    saveSettings() {
+        // Clear out existing settings
+        this.config.process.args = new Array();
+        this.config.process.environment = new Array();
+
+        // Get nodes
+        let argNodes = document.getElementById("demoArgumentsList").childNodes;
+        let envNodes = document.getElementById("demoEnvVariablesList").childNodes;
+
+        // Loop through args nodes
+        argNodes.forEach((node) => {
+            // Push back argument
+            let arg = node.getElementsByTagName("input")[0].value;
+            this.config.process.args.push(arg);
+        });
+
+        // Loop through env nodes
+        envNodes.forEach((node) => {
+            // Push back environment variable
+            this.config.process.environment.push({
+                name: node.getElementsByTagName("input")[0].value,
+                value: node.getElementsByTagName("input")[1].value
+            });
+        });
+    }
+
+    // Handle websocket messages
+    handleWebsocketMessage(msg) {
+		const payload = JSON.parse(msg.data);
+
+        // Only listen to our messages
+        switch(payload.command) {
+		case "updatePTYBuffer":
+			this.handlePTYBuffer(payload);
+			break;
+		case "updateState":
+			this.handleStateChange(payload);
+			break;
+		default:
+			break;
+	}
+    }
+
+    handleTerminalData(data) {
+        // Write key to websocket
+        this.ws.send(JSON.stringify({command: "writeBuffer", buffer: data}));
+    }
+
+    // Handle receiving terminal data
+    handlePTYBuffer(msg) {
+        // Shift if max length reached
+        if (this.ptyBuffer.length === this.ptyBufferMaxLength)
         {
-            fetch(`/${this.basename}/start`, {method: 'POST'})
+            this.ptyBuffer.shift()
         }
-        else
-        {
-            fetch(`/${this.basename}/stop`, {method: 'POST'})
+
+        // Push message into buffer
+        this.ptyBuffer.push(msg.buffer);
+
+        // If active, write data to terminal
+        if (this.active) {
+            app.terminal.write(msg.buffer);
         }
     }
 
-    updateUI() {
-        let activeDemoStartButton = document.getElementById("startDemoButton");
-
-        if (this.state.running)
-        {
-            this.activeBadge.innerText = "Running";
-            this.activeBadge.classList.add("badge-success");
-
-            activeDemoStartButton.classList.add("btn-outline-danger")
-            activeDemoStartButton.classList.remove("btn-outline-success")
-            activeDemoStartButton.innerText = "Stop Demo"
-        }
-        else
-        {
-            this.activeBadge.classList.remove("badge-success");
-            this.activeBadge.innerText = "Not Running";
-
-            activeDemoStartButton.classList.remove("btn-outline-danger")
-            activeDemoStartButton.classList.add("btn-outline-success")
-            activeDemoStartButton.innerText = "Start Demo"
-        }
-
-        if (app.activeDemo == this)
-        {
-            document.getElementById("terminal").value = this.stdData;
-        }
+    handleResize() {
+	// Refit terminal
+        app.fitAddon.fit();
+        this.ws.send(JSON.stringify({
+            command: "resize", 
+            rows: app.terminal.rows,
+            cols: app.terminal.cols
+        }));
     }
 
-    becomeActive()
-    {
-        // Ignore if already active
-        if (app.activeDemo == this) {
-            return;
-        }
+	updateUI() {
+		if (this.state.running) {
+			this.listRunningIndicator.innerText = "Running";
+			this.listRunningIndicator.classList.add("bg-success");
+		} else {
+			this.listRunningIndicator.innerText = "Not Running";
+			this.listRunningIndicator.classList.remove("bg-success");
+		}
 
-        // Get active demo content elements
-        let activeDemoTitle = document.getElementById("activeDemoTitle");
-        let activeDemoDescription = document.getElementById("activeDemoDescription");
-        let activeDemoStartButton = document.getElementById("startDemoButton");
-        let activeDemoPageButton = document.getElementById("demoPageButton");
+		if (this.active) {
+			let toggleButton = document.getElementById("demoToggleButton");
+			let toggleButtonChild = toggleButton.childNodes[0];
 
-        // Set title
-        activeDemoTitle.innerText = this.name;
-        activeDemoDescription.innerText = this.description;
+			if (this.state.running) {
+				toggleButton.classList.remove("btn-outline-success")
+				toggleButton.classList.add("btn-outline-danger");
+				toggleButtonChild.classList.remove("bi-play-fill")
+				toggleButtonChild.classList.add("bi-stop-fill")
+				
+			} else {
+				toggleButton.classList.add("btn-outline-success");
+				toggleButton.classList.remove("btn-outline-danger");
+				toggleButtonChild.classList.add("bi-play-fill")
+				toggleButtonChild.classList.remove("bi-stop-fill")
+			}
+		}
+	}
 
-        // Enable buttons
-        activeDemoStartButton.disabled = true;
-        activeDemoStartButton.disabled = false;
-        activeDemoPageButton.disabled = false;
+    // Handle state change
+    handleStateChange(msg) {
+		console.log(msg);
+		if (msg.id === this.config.id) {
+			this.state = msg.state;
+		}
 
-        activeDemoStartButton.onclick = this.toggleDemo.bind(this);
-        activeDemoPageButton.onclick = () => {window.open(this.basename, '_blank')}
-        
-        this.dispatchEvent( new Event('becameActive', this))
-
-        this.updateUI();
-    }
-
-    handleWebsocketMessage(msg)
-    {
-        const data = JSON.parse(msg.data);
-        
-        // Ignore data that doesn't belong to us
-        if (data.id != this.basename)
-        {
-            return
-        }
-
-        switch(data.command)
-        {
-            case "updateState":
-                this.handleStateMessage(data)
-                break;
-            case "newStdOut":
-                this.handleStdData(data);
-                break;
-        }
-    }
-
-    handleStateMessage(data)
-    {
-        this.state = data.state;
-        this.updateUI()
-    }
-
-    handleStdData(data)
-    {
-        this.stdData += data.buffer;
-        document.getElementById("terminal").value += data.buffer;
-        document.getElementById("terminal").scrollTop = document.getElementById("terminal").scrollHeight 
+		this.updateUI();
     }
 }
 
-let app = null;
-document.addEventListener("DOMContentLoaded", domLoaded, false);
-function domLoaded(e)
-{
-    app = new Application();
+// Entry point
+document.addEventListener("DOMContentLoaded", () => {
+    // Create Application
+    app = new Application()    
+});
 
-}
-  

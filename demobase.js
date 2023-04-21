@@ -2,6 +2,7 @@ const express = require('express')
 const fs = require('fs');
 const path = require('path');
 const bodyParser = require('body-parser');
+const pty = require('node-pty')
 const { spawn } = require('child_process');
 const { start } = require('repl');
 
@@ -23,7 +24,7 @@ class DemoBase {
         this.state = {
             running: false
         }
-
+		this.childPty = null;
         this.stdData = Buffer.from("");
 
         this.setupRoutes();
@@ -44,8 +45,15 @@ class DemoBase {
         // Setup demo start/stop api calls
         this.app.post(`/${this.basename}/start`, this.handleStartAPICall.bind(this))
         this.app.post(`/${this.basename}/stop`, this.handleStopAPICall.bind(this))
-    }
 
+		this.clients = []
+
+		this.app.ws(`/${this.basename}`, (ws, req) => {
+			this.clients.push(ws);
+			ws.on("message", this.handleWebsocketMessage.bind(this))
+		});
+    }
+	
     handleStartAPICall(req, res) {
         // Ignore if already running
         if (this.state.running) {
@@ -75,60 +83,69 @@ class DemoBase {
     }
 
     startDemo(data) {
-        console.log(data);
+		this.startProcess();
     }
 
     stopDemo(data) {
+		this.stopProcess();
     }
 
-    startProcess(command, args) {
+    startProcess() {
         // Update running flag
         this.state.running = true;
 
         // Create child
-        this.child = spawn(command, args);
+        this.childPty = pty.spawn(
+			this.config.process.command,
+			this.config.process.args,
+			{
+				name: 'xterm-color',
+				cols: 80,
+				rows: 30,
+				cwd: this.config.process.cwd ? this.config.process.cwd : process.env.HOME,
+				env: this.config.process.environment
+			}
+		);
 
         // Attach callbacks
-        this.child.stdout.on('data', this.handleStdOut.bind(this));
-        this.child.stderr.on('data', this.handleStdErr.bind(this));
-        this.child.on('exit', this.handleOnExit.bind(this));
-        this.child.on('error', this.handleOnError.bind(this));
+        this.childPty.on('data', this.handlePtyBuffer.bind(this));
+		this.childPty.on("error", this.handleOnError.bind(this));
+		this.childPty.on("exit", this.handleOnExit.bind(this));
 
         // Send message updating state
         this.wsUpdateState()
     }
 
     stopProcess() {
-        this.child.kill()
+        this.childPty.kill()
     }
 
-    handleStdOut(data) {
-        // Update Buffer
-        this.stdData = Buffer.concat([this.stdData, data])
-        
-        // Send latest buffer to WS clients
-        this.ws.clients.forEach((client) => {
-            client.send(JSON.stringify({
-                id: this.basename,
-                command: "newStdOut",
-                "buffer": data.toString()
-            }))
-        });
-    }
+	handlePtyBuffer(data) {
+		if (this.clients) {
+			this.clients.forEach((client) => {
+				client.send(JSON.stringify({
+					id: this.basename,
+					command: "updatePTYBuffer",
+					buffer: data.toString()
+				}));
+			});
+		}
+	}
 
-    handleStdErr(data) {
-        // Update Buffer
-        this.stdData = Buffer.concat([this.stdData, data])
-        
-        // Send latest buffer to WS clients
-        this.ws.clients.forEach((client) => {
-            client.send(JSON.stringify({
-                id: this.basename,
-                command: "newStdErr",
-                "buffer": data.toString()
-            }))
-        });
-    }
+	handleWebsocketMessage(msg) {
+		const payload = JSON.parse(msg);
+		
+		if (payload.command === "resize") {
+			if (!this.childPty)
+				return;
+			this.childPty.resize(payload.cols, payload.rows)
+		} else {
+			if (!this.childPty)
+				return;
+			this.childPty.write(payload.buffer);
+		}
+
+	}
 
     handleOnExit(code, signal) {
         this.state.running = false;

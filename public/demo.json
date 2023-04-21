@@ -1,0 +1,18 @@
+{
+    "name": "Demo Name",
+    "description": "Demo description...",
+    "process": {
+        "command": "bash",
+        "args": [
+            "arg1",
+            "arg2",
+            "arg3"
+        ],
+        "environment": [
+            {
+                "name": "MY_VAR",
+                "value": "my_var_value"
+            }
+        ]
+    }
+}

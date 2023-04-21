@@ -1,0 +1,57 @@
+
+
+#rightMenu {
+    width: 160px;
+}
+
+#mainContent {
+    padding:0;
+    margin:0;
+}
+
+#mainWrapper {
+    overflow-x: hidden;
+}
+
+#leftMenuSideBar {
+    overflow-y: scroll;
+}
+
+.demo-settings-input {
+    padding-bottom: 10px;
+}
+
+#demoSettingsModelContent {
+    max-height: 100vh;
+    overflow-y: auto;
+}
+
+@media only screen and (max-width: 768px) {
+    #leftMenu {
+        width:100vw;
+    }
+
+    #leftNavClosePlaceholder {
+        display: none;
+    }
+}
+
+@media only screen and (min-width: 768px) {
+    #leftMenu {
+        width:320px;
+    }
+
+    #leftNavClose {
+        display:none;
+    }
+}
+
+.active {
+    background-color: #41c363 !important;
+    border-color: #41c363 !important;
+}
+
+.xterm-viewport {
+    padding:10px;
+}
+
