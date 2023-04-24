@@ -350,6 +350,17 @@ class Demo {
                 value: node.getElementsByTagName("input")[1].value
             });
         });
+
+        fetch(
+            "/" + this.config.id + "/updateConfig",
+            {
+                method: 'POST',
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(this.config)
+            }
+        );
     }
 
     // Handle websocket messages

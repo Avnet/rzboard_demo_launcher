@@ -43,8 +43,11 @@ class DemoBase {
         this.app.get(`/${this.basename}/getStdData`, this.handleStdDataRequest.bind(this));
 
         // Setup demo start/stop api calls
-        this.app.post(`/${this.basename}/start`, this.handleStartAPICall.bind(this))
-        this.app.post(`/${this.basename}/stop`, this.handleStopAPICall.bind(this))
+        this.app.post(`/${this.basename}/start`, this.handleStartAPICall.bind(this));
+        this.app.post(`/${this.basename}/stop`, this.handleStopAPICall.bind(this));
+
+        // Setup config update call
+        this.app.post(`/${this.basename}/updateConfig`, this.handleConfigUpdate.bind(this));
 
 		this.clients = []
 
@@ -128,6 +131,12 @@ class DemoBase {
 
     stopProcess() {
         this.childPty.kill()
+    }
+
+    // Handle receiving config update
+    handleConfigUpdate(req, res) {
+        this.config = req.body;
+        res.sendStatus(200);
     }
 
 	handlePtyBuffer(data) {

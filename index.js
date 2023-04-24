@@ -11,6 +11,7 @@ global.__basedir = __dirname;
 // Main web interface
 app.use(express.static(`${global.__basedir}/public`))
 app.use(express.static(`${global.__basedir}/node_modules`))
+app.use(bodyParser.json())
 
 // Hold demos
 let demos = [];
