@@ -112,7 +112,7 @@ class DemoBase {
 				name: 'xterm-color',
 				cols: 80,
 				rows: 30,
-				cwd: this.config.process.cwd ? this.config.process.cwd : process.env.HOME,
+				cwd: this.config.process.cwd ? this.config.process.cwd : `${global.__demosDir}/${this.basename}`,
 				env: env
 			}
 		);
