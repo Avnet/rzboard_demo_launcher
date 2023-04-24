@@ -21,6 +21,8 @@ class Application {
         this.initialUISetup();
 
 		this.getDemoList()
+
+        document.getElementById("reloadDemosButton").addEventListener("click", this.reloadDemoList.bind(this));
     }
 
     setActiveDemo(demo) {
@@ -40,6 +42,17 @@ class Application {
 				this.demos.push(new Demo(demo));
 			});
 		});
+    }
+
+    reloadDemoList() {
+        fetch("/reloadDemoList")
+        .then((res) => res.json())
+        .then((demos) => {
+            document.getElementById("leftMenuList").innerHTML = "";
+            demos.forEach((demo) => {
+                this.demos.push(new Demo(demo));
+            });
+        });
     }
 
     // Handle initial UI Setup

@@ -94,6 +94,16 @@ class DemoBase {
         // Update running flag
         this.state.running = true;
 
+        // Save default environement variables
+        let env = process.env;
+
+        // Iterate through config env vars
+        this.config.process.environment.forEach((envVar) => {
+            env[envVar.name] = envVar.value;
+        });
+
+        console.log(env)
+
         // Create child
         this.childPty = pty.spawn(
 			this.config.process.command,
@@ -103,7 +113,7 @@ class DemoBase {
 				cols: 80,
 				rows: 30,
 				cwd: this.config.process.cwd ? this.config.process.cwd : process.env.HOME,
-				env: this.config.process.environment
+				env: env
 			}
 		);
 
