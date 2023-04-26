@@ -25,21 +25,21 @@ node index.js /path/to/demos/directory
 A demo package consists of a directory containing an `index.json` file and an optional `public` directory holding static webpage assets. The demo package directory must **NOT** contain any spaces or special characters. Here is an `index.json` file to work from:
 ```json
 {
-	"name": "My Demo Package",
-  "description": "A demo package configuration.",
-	"process": {
-	    "command": "./demo_application",
-	    "cwd": "/optional/path/to/cwd",
-	    "args": [
-        "arg1"
-	    ],
-	    "environment": [
-        {
-          "name":"MY_VAR",
-          "value":"MY_VAR_VALUE"
-        }
-	    ]
-	}
+    "name": "My Demo Package",
+    "description": "A demo package configuration.",
+    "process": {
+        "command": "./demo_application",
+        "cwd": "/optional/path/to/cwd",
+        "args": [
+            "arg1"
+        ],
+        "environment": [
+            {
+                "name":"MY_VAR",
+                "value":"MY_VAR_VALUE"
+            }
+        ]
+    }
 }
 ```
 
